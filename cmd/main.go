@@ -13,9 +13,18 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGINT,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
@@ -26,6 +35,7 @@ func main() {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
 	defer db.Close()
+
 	log.Println("Connected to PostgreSQL")
 
 	redisCache, err := cache.NewCache(cfg)
@@ -45,16 +55,17 @@ func main() {
 	defer consumer.Close()
 	log.Println("Connected to RabbitMQ")
 
-	if err := consumer.Consume(func(order *models.Order) error {
-		ctx := context.Background()
-		return orderService.ProcessOrder(ctx, order)
-	}); err != nil {
+	err = consumer.Consume(func(order *models.Order) error {
+		ctxWithTimeout, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		return orderService.ProcessOrder(ctxWithTimeout, order)
+	})
+
+	if err != nil {
 		log.Fatalf("Failed to start consuming: %v", err)
 	}
 
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-
+	<-ctx.Done()
 	log.Println("Shutting down server...")
 }
