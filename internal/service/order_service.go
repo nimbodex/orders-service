@@ -23,7 +23,7 @@ func NewOrderService(repo *repository.OrderRepository, cache *cache.Cache) *Orde
 }
 
 func (s *OrderService) ProcessOrder(ctx context.Context, order *models.Order) error {
-	if err := s.repo.CreateOrder(order); err != nil {
+	if err := s.repo.CreateOrder(ctx, order); err != nil {
 		return fmt.Errorf("failed to save order to database: %w", err)
 	}
 
@@ -45,7 +45,7 @@ func (s *OrderService) GetOrder(ctx context.Context, orderID string) (*models.Or
 		return order, nil
 	}
 
-	order, err = s.repo.GetOrderByOrderID(orderID)
+	order, err = s.repo.GetOrderByOrderID(ctx, orderID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get order: %w", err)
 	}
